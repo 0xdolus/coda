@@ -10,10 +10,8 @@ import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.channel.ChannelInfo
 import org.schabi.newpipe.extractor.kiosk.KioskInfo
 import org.schabi.newpipe.extractor.search.SearchInfo
-import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
-import org.schabi.newpipe.extractor.channel.ChannelInfoItem
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,7 +28,7 @@ class NewPipeSearchDataSource @Inject constructor() {
             withTimeout(TIMEOUT_MS) {
                 val linkHandler = youTubeService
                     .searchQHFactory
-                    .fromQuery(query, listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
+                    .fromQuery(query, listOf("videos"), "")
                 val info = SearchInfo.getInfo(youTubeService, linkHandler)
                 info.relatedItems
                     .filterIsInstance<StreamInfoItem>()
@@ -73,11 +71,10 @@ class NewPipeSearchDataSource @Inject constructor() {
                     val kioskList = youTubeService.kioskList
                     val kioskId   = kioskList.availableKiosks.firstOrNull()
                     if (kioskId != null) {
-                        val info = KioskInfo.getInfo(
-                            youTubeService,
-                            kioskList.getListLinkHandlerFactoryByType(kioskId)
-                                .fromId(kioskId)
-                        )
+                        val linkHandler = kioskList
+                            .getListLinkHandlerFactoryByType(kioskId)
+                            .fromId(kioskId)
+                        val info = KioskInfo.getInfo(youTubeService, linkHandler.url)
                         val tracks = info.relatedItems
                             .filterIsInstance<StreamInfoItem>()
                             .take(TOP_SONGS_COUNT)
@@ -86,13 +83,10 @@ class NewPipeSearchDataSource @Inject constructor() {
                     }
                 } catch (_: Exception) {}
 
+                // Fallback: search("top music")
                 val linkHandler = youTubeService
                     .searchQHFactory
-                    .fromQuery(
-                        "top music",
-                        listOf(YoutubeSearchQueryHandlerFactory.VIDEOS),
-                        ""
-                    )
+                    .fromQuery("top music", listOf("videos"), "")
                 SearchInfo.getInfo(youTubeService, linkHandler)
                     .relatedItems
                     .filterIsInstance<StreamInfoItem>()
