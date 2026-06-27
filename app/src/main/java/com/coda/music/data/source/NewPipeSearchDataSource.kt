@@ -9,7 +9,6 @@ import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.channel.ChannelInfo
 import org.schabi.newpipe.extractor.kiosk.KioskInfo
-import org.schabi.newpipe.extractor.search.SearchInfo
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import javax.inject.Inject
@@ -26,11 +25,12 @@ class NewPipeSearchDataSource @Inject constructor() {
     suspend fun searchTracks(query: String): List<Track> =
         withContext(Dispatchers.IO) {
             withTimeout(TIMEOUT_MS) {
-                val linkHandler = youTubeService
+                val queryHandler = youTubeService
                     .searchQHFactory
                     .fromQuery(query, listOf("videos"), "")
-                val info = SearchInfo.getInfo(youTubeService, linkHandler)
-                info.getRelatedItems()
+                val extractor = youTubeService.getSearchExtractor(queryHandler)
+                extractor.fetchPage()
+                extractor.initialPage.items
                     .filterIsInstance<StreamInfoItem>()
                     .map { it.toTrack() }
             }
@@ -58,15 +58,22 @@ class NewPipeSearchDataSource @Inject constructor() {
             withTimeout(TIMEOUT_MS) {
                 val url  = "https://www.youtube.com/channel/$channelId/videos"
                 val info = ChannelInfo.getInfo(youTubeService, url)
-                info.getRelatedItems()
-                    .filterIsInstance<StreamInfoItem>()
-                    .map { it.toTrack() }
+                info.tabs
+                    .firstOrNull()
+                    ?.let { tab ->
+                        val tabExtractor = youTubeService.getChannelTabExtractor(tab)
+                        tabExtractor.fetchPage()
+                        tabExtractor.initialPage.items
+                            .filterIsInstance<StreamInfoItem>()
+                            .map { it.toTrack() }
+                    } ?: emptyList()
             }
         }
 
     suspend fun getTopSongs(): List<Track> =
         withContext(Dispatchers.IO) {
             withTimeout(TIMEOUT_MS) {
+                // Attempt 1: kiosk chart
                 try {
                     val kioskList = youTubeService.kioskList
                     val kioskId   = kioskList.availableKiosks.firstOrNull()
@@ -75,7 +82,7 @@ class NewPipeSearchDataSource @Inject constructor() {
                             .getListLinkHandlerFactoryByType(kioskId)
                             .fromId(kioskId)
                         val info = KioskInfo.getInfo(youTubeService, linkHandler.url)
-                        val tracks = info.getRelatedItems()
+                        val tracks = info.relatedItems
                             .filterIsInstance<StreamInfoItem>()
                             .take(TOP_SONGS_COUNT)
                             .map { it.toTrack() }
@@ -83,12 +90,13 @@ class NewPipeSearchDataSource @Inject constructor() {
                     }
                 } catch (_: Exception) {}
 
-                // Fallback: search("top music")
-                val linkHandler = youTubeService
+                // Attempt 2: search("top music") fallback
+                val queryHandler = youTubeService
                     .searchQHFactory
                     .fromQuery("top music", listOf("videos"), "")
-                SearchInfo.getInfo(youTubeService, linkHandler)
-                    .getRelatedItems()
+                val extractor = youTubeService.getSearchExtractor(queryHandler)
+                extractor.fetchPage()
+                extractor.initialPage.items
                     .filterIsInstance<StreamInfoItem>()
                     .take(TOP_SONGS_COUNT)
                     .map { it.toTrack() }
