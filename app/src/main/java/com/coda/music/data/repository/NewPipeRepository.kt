@@ -73,6 +73,10 @@ class NewPipeRepository @Inject constructor(
         return searchDataSource.getTopSongs()
     }
 
+    override suspend fun getArtistInfo(artistId: String): Artist {
+        return searchDataSource.getArtistInfo(artistId)
+    }
+
     override suspend fun getArtistSongs(artistId: String): List<Track> {
         return searchDataSource.getArtistSongs(artistId)
     }
