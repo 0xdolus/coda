@@ -42,9 +42,9 @@ import javax.inject.Singleton
  * Future TODOs:
  *   - toggleLike(trackId): Phase 2 — DataStore-backed (datastore-preferences),
  *     storing a Set<String> of liked track IDs. getLikedSongs() will resolve
- *     those IDs back to Track via getTrack()/NewPipe.
- *   - getArtists(): currently delegates to searchDataSource using a broad
- *     search; a more targeted channel-browse approach may improve relevance.
+ *     those IDs back to Track via getTrackInfo()/NewPipe.
+ *   - getArtists(): currently a broad search fallback; a channel-browse
+ *     approach may improve relevance once the NewPipe layer is proven.
  */
 @Singleton
 class NewPipeRepository @Inject constructor(
@@ -53,8 +53,20 @@ class NewPipeRepository @Inject constructor(
 ) : MusicRepository {
 
     override suspend fun getArtists(): List<Artist> {
-        return searchDataSource.getArtists()
-        // Exceptions propagate up — callers (ViewModels) catch and call mapToUiError()
+        // NewPipe has no "list all artists" endpoint. Delegate to a broad
+        // top-music search and extract unique uploaders as a best-effort
+        // artist list until a better source is available.
+        val tracks = searchDataSource.searchTracks("top music artists")
+        return tracks
+            .distinctBy { it.artistName }
+            .map { track ->
+                Artist(
+                    id               = track.id, // best-effort; real channel ID needs getArtistInfo
+                    name             = track.artistName,
+                    imageUrl         = track.imageUrl,
+                    monthlyListeners = "Unknown listeners"
+                )
+            }
     }
 
     override suspend fun getTopSongs(): List<Track> {
@@ -66,7 +78,7 @@ class NewPipeRepository @Inject constructor(
     }
 
     override suspend fun search(query: String): List<Track> {
-        return searchDataSource.search(query)
+        return searchDataSource.searchTracks(query)
     }
 
     override suspend fun getLikedSongs(): List<Track> {
@@ -77,7 +89,7 @@ class NewPipeRepository @Inject constructor(
     }
 
     override suspend fun getTrack(trackId: String): Track {
-        return searchDataSource.getTrack(trackId)
+        return searchDataSource.getTrackInfo(trackId)
     }
 
     /**
@@ -89,8 +101,8 @@ class NewPipeRepository @Inject constructor(
      * layer's ExtractionException is distinct from a metadata failure
      * and should not surface to the UI as a critical error.
      *
-     * [IOException] and [TimeoutCancellationException] are re-thrown so
-     * the calling ViewModel can emit the correct UiError via [mapToUiError].
+     * [IOException] and [TimeoutCancellationException] propagate to the
+     * calling ViewModel, which maps them via [mapToUiError].
      */
     override suspend fun getTrackStreamUrl(trackId: String): StreamResult {
         return try {
@@ -98,18 +110,17 @@ class NewPipeRepository @Inject constructor(
         } catch (e: ExtractionException) {
             StreamResult.Unavailable
         }
-        // IOException and TimeoutCancellationException propagate to ViewModel
     }
 
     /**
      * Canonical exception → [UiError] mapping.
      *
-     * This is the single source of truth for user-facing error messages.
-     * ViewModels catch exceptions thrown from repository calls and pass them
-     * here to get the correct UiError to emit on their error SharedFlow.
+     * Single source of truth for user-facing error messages. ViewModels
+     * catch exceptions thrown from repository calls and pass them here to
+     * get the correct UiError to emit on their error SharedFlow.
      *
-     * CancellationException (non-timeout) is re-thrown untouched to preserve
-     * coroutine cooperative cancellation.
+     * CancellationException (non-timeout) is re-thrown untouched to
+     * preserve coroutine cooperative cancellation.
      */
     fun mapToUiError(e: Exception): UiError {
         if (e is CancellationException && e !is TimeoutCancellationException) throw e
