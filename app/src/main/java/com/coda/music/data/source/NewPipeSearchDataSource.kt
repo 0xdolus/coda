@@ -30,7 +30,7 @@ class NewPipeSearchDataSource @Inject constructor() {
                     .searchQHFactory
                     .fromQuery(query, listOf("videos"), "")
                 val info = SearchInfo.getInfo(youTubeService, linkHandler)
-                info.relatedItems
+                info.getRelatedItems()
                     .filterIsInstance<StreamInfoItem>()
                     .map { it.toTrack() }
             }
@@ -58,7 +58,7 @@ class NewPipeSearchDataSource @Inject constructor() {
             withTimeout(TIMEOUT_MS) {
                 val url  = "https://www.youtube.com/channel/$channelId/videos"
                 val info = ChannelInfo.getInfo(youTubeService, url)
-                info.relatedItems
+                info.getRelatedItems()
                     .filterIsInstance<StreamInfoItem>()
                     .map { it.toTrack() }
             }
@@ -75,7 +75,7 @@ class NewPipeSearchDataSource @Inject constructor() {
                             .getListLinkHandlerFactoryByType(kioskId)
                             .fromId(kioskId)
                         val info = KioskInfo.getInfo(youTubeService, linkHandler.url)
-                        val tracks = info.relatedItems
+                        val tracks = info.getRelatedItems()
                             .filterIsInstance<StreamInfoItem>()
                             .take(TOP_SONGS_COUNT)
                             .map { it.toTrack() }
@@ -88,7 +88,7 @@ class NewPipeSearchDataSource @Inject constructor() {
                     .searchQHFactory
                     .fromQuery("top music", listOf("videos"), "")
                 SearchInfo.getInfo(youTubeService, linkHandler)
-                    .relatedItems
+                    .getRelatedItems()
                     .filterIsInstance<StreamInfoItem>()
                     .take(TOP_SONGS_COUNT)
                     .map { it.toTrack() }
