@@ -36,15 +36,15 @@ fun PlaylistCard(
     ) {
         Column(modifier = Modifier.padding(CodaDimens.ItemSpacing)) {
             AsyncImage(
-                model = playlist.imageUrl,
-                contentDescription = playlist.name,
+                model = null,
+                contentDescription = playlist.title,
                 modifier = Modifier
                     .size(CodaDimens.PlaylistCardHeight)
                     .clip(MaterialTheme.shapes.small)
             )
             Spacer(modifier = Modifier.height((CodaDimens.ItemSpacing / 2)))
             Text(
-                text = playlist.name,
+                text = playlist.title,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
