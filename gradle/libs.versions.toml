@@ -13,6 +13,7 @@ coreKtx                 = "1.17.0"
 newpipe                 = "0.26.3"
 okhttp                  = "4.12.0"
 media3                  = "1.10.1"
+datastore               = "1.1.1"
 
 [libraries]
 compose-bom                   = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -34,6 +35,7 @@ newpipe-extractor             = { group = "com.github.TeamNewPipe", name = "NewP
 okhttp                        = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 media3-exoplayer              = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 media3-session                = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
+datastore-preferences         = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 
 [plugins]
 android-application   = { id = "com.android.application", version.ref = "agp" }

@@ -1,5 +1,6 @@
 package com.coda.music.data.source
 
+import com.coda.music.data.model.StreamQuality
 import com.coda.music.data.model.StreamResult
 import com.coda.music.data.provider.StreamProvider
 import kotlinx.coroutines.Dispatchers
@@ -15,48 +16,30 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Purpose: Resolves a YouTube Video ID (Track.id) to a playable [StreamResult]
- * via NewPipeExtractor. This is the sole class responsible for stream URL
- * resolution. It never touches search or metadata — that is
- * NewPipeSearchDataSource's domain. Isolation prevents stream failures from
- * poisoning metadata queries and makes this layer independently testable.
+ * Purpose: Resolves a YouTube Video ID to a [StreamResult] via NewPipeExtractor.
+ * Respects [StreamQuality] to pick the appropriate bitrate tier.
  *
- * Stream resolution is the most failure-prone layer in this app. Within a
- * single resolution call, alternate audio formats/qualities are tried before
- * giving up. This is expected defensive coding — NOT a retry (retrying a
- * failed call is forbidden per Error Handling Strategy). ExtractionException
- * is caught broadly; NewPipeExtractor throws many specific subtypes
- * (age-restriction, content removed, regional blocks, etc.) and catching the
- * broad type is intentional.
+ * Quality selection (within one resolution call — not a retry):
+ *   LOW    → lowest available bitrate
+ *   NORMAL → closest to 128 kbps
+ *   HIGH   → closest to 160 kbps
+ *   BEST   → highest available bitrate (default)
  *
- * Every extraction call is wrapped in withContext(Dispatchers.IO) +
- * withTimeout(10_000). NewPipe can hang indefinitely — both are mandatory.
+ * IOException and TimeoutCancellationException are re-thrown for
+ * NewPipeRepository to map to UiError.
  *
- * Dependencies: NewPipeExtractor (via NewPipe.init in CodaApplication),
- *               Kotlin Coroutines
- *
- * Public API: getStreamUrl(trackId: String): StreamResult
- *
- * Future TODOs:
- *   - If NewPipe ever exposes a more reliable stream resolution path, adopt it here.
- *   - Consider caching resolved URLs briefly (TTL ~5 min) to avoid redundant
- *     extraction on repeated playback of the same track.
+ * Dependencies: NewPipeExtractor, Kotlin Coroutines
+ * Public API: getStreamUrl(trackId, quality)
+ * Future TODOs: brief URL caching (TTL ~5 min) to avoid redundant extraction.
  */
 @Singleton
 class NewPipeStreamDataSource @Inject constructor() : StreamProvider {
 
-    /**
-     * Resolves a YouTube Video ID to a [StreamResult].
-     *
-     * Returns:
-     *   [StreamResult.Ready]       — a valid audio stream URL ready for ExoPlayer.
-     *   [StreamResult.Unavailable] — no usable stream found (removed, no audio, etc).
-     *   [StreamResult.Restricted]  — age-gated or region-blocked content.
-     *
-     * IOException and TimeoutCancellationException are re-thrown so
-     * NewPipeRepository can apply the canonical exception → UiError mapping.
-     */
-    override suspend fun getStreamUrl(trackId: String): StreamResult {
+    // Called by PlayerController when quality setting changes mid-playback
+    suspend fun getStreamUrl(
+        trackId: String,
+        quality: StreamQuality = StreamQuality.BEST
+    ): StreamResult {
         return withContext(Dispatchers.IO) {
             withTimeout(10_000L) {
                 try {
@@ -66,22 +49,24 @@ class NewPipeStreamDataSource @Inject constructor() : StreamProvider {
                     val extractor: StreamExtractor = service.getStreamExtractor(linkHandler)
                     extractor.fetchPage()
 
-                    val audioStream: AudioStream? = pickBestAudioStream(extractor)
+                    val streams = extractor.audioStreams
+                        ?.filter { !it.content.isNullOrBlank() }
+                        ?: emptyList()
 
-                    if (audioStream != null && !audioStream.content.isNullOrBlank()) {
-                        StreamResult.Ready(url = audioStream.content)
-                    } else {
-                        StreamResult.Unavailable
-                    }
+                    if (streams.isEmpty()) return@withTimeout StreamResult.Unavailable
+
+                    val picked = pickByQuality(streams, quality)
+                        ?: return@withTimeout StreamResult.Unavailable
+
+                    StreamResult.Ready(url = picked.content)
                 } catch (e: TimeoutCancellationException) {
-                    throw e // re-throw — mapped in NewPipeRepository
+                    throw e
                 } catch (e: IOException) {
-                    throw e // re-throw — mapped in NewPipeRepository
+                    throw e
                 } catch (e: ExtractionException) {
-                    // Broadly catch all NewPipe subtypes intentionally.
                     val msg = e.message?.lowercase() ?: ""
                     if (msg.contains("age") || msg.contains("restricted") ||
-                        msg.contains("region") || msg.contains("not available in your country")
+                        msg.contains("region") || msg.contains("not available")
                     ) {
                         StreamResult.Restricted(reason = e.message ?: "Content restricted")
                     } else {
@@ -92,29 +77,23 @@ class NewPipeStreamDataSource @Inject constructor() : StreamProvider {
         }
     }
 
-    /**
-     * Picks the best available audio-only stream.
-     * Priority order within a single resolution call (not a retry):
-     *   1. Opus/WebM (best quality per bit)
-     *   2. M4A
-     *   3. Any other audio-only stream with a non-blank content URL
-     *
-     * Returns null only if no audio stream at all is available.
-     */
-    private fun pickBestAudioStream(extractor: StreamExtractor): AudioStream? {
-        return try {
-            val streams = extractor.audioStreams
-            if (streams.isNullOrEmpty()) return null
+    // StreamProvider interface — defaults to BEST for callers that don't pass quality
+    override suspend fun getStreamUrl(trackId: String): StreamResult =
+        getStreamUrl(trackId, StreamQuality.BEST)
 
-            streams.firstOrNull {
-                it.format?.name?.contains("OPUS", ignoreCase = true) == true &&
-                    !it.content.isNullOrBlank()
-            } ?: streams.firstOrNull {
-                it.format?.name?.contains("M4A", ignoreCase = true) == true &&
-                    !it.content.isNullOrBlank()
-            } ?: streams.firstOrNull { !it.content.isNullOrBlank() }
-        } catch (e: ExtractionException) {
-            null
+    private fun pickByQuality(streams: List<AudioStream>, quality: StreamQuality): AudioStream? {
+        val withBitrate = streams.mapNotNull { s ->
+            val br = s.averageBitrate.takeIf { it > 0 } ?: return@mapNotNull null
+            Pair(br, s)
+        }.sortedBy { it.first }
+
+        if (withBitrate.isEmpty()) return streams.firstOrNull()
+
+        return when (quality) {
+            StreamQuality.LOW  -> withBitrate.first().second
+            StreamQuality.BEST -> withBitrate.last().second
+            StreamQuality.NORMAL -> withBitrate.minByOrNull { kotlin.math.abs(it.first - 128) }?.second
+            StreamQuality.HIGH   -> withBitrate.minByOrNull { kotlin.math.abs(it.first - 160) }?.second
         }
     }
 }

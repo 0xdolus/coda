@@ -68,5 +68,6 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)
+    implementation(libs.datastore.preferences)
     debugImplementation(libs.compose.ui.tooling)
 }
