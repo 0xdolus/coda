@@ -21,7 +21,7 @@ fun SectionHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = CodaDimens.ScreenPadding, vertical = CodaDimens.SpacingXSmall),
+            .padding(horizontal = CodaDimens.ContentPadding, vertical = (CodaDimens.ItemSpacing / 2)),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(

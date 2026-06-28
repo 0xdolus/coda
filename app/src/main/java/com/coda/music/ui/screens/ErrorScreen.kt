@@ -24,7 +24,7 @@ fun ErrorScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(CodaDimens.ScreenPadding),
+            .padding(CodaDimens.ContentPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -34,7 +34,7 @@ fun ErrorScreen(
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(CodaDimens.SpacingLarge))
+        Spacer(modifier = Modifier.height((CodaDimens.SectionSpacing)))
         Button(onClick = onRetry) {
             Text("Retry")
         }

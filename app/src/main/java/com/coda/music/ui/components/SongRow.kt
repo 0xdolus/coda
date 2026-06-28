@@ -30,7 +30,7 @@ fun SongRow(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick(track.id) }
-            .padding(horizontal = CodaDimens.ScreenPadding, vertical = CodaDimens.SpacingSmall),
+            .padding(horizontal = CodaDimens.ContentPadding, vertical = CodaDimens.ItemSpacing),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
@@ -40,7 +40,7 @@ fun SongRow(
                 .size(CodaDimens.SongImageSize)
                 .clip(MaterialTheme.shapes.small)
         )
-        Spacer(modifier = Modifier.width(CodaDimens.SpacingMedium))
+        Spacer(modifier = Modifier.width((CodaDimens.ItemSpacing * 2)))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = track.title,

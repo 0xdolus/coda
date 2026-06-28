@@ -28,7 +28,7 @@ fun ArtistAvatar(
     Column(
         modifier = modifier
             .clickable { onClick(artist.id) }
-            .padding(CodaDimens.SpacingSmall),
+            .padding(CodaDimens.ItemSpacing),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         AsyncImage(
@@ -38,7 +38,7 @@ fun ArtistAvatar(
                 .size(CodaDimens.ArtistAvatarSize)
                 .clip(CircleShape)
         )
-        Spacer(modifier = Modifier.height(CodaDimens.SpacingXSmall))
+        Spacer(modifier = Modifier.height((CodaDimens.ItemSpacing / 2)))
         Text(
             text = artist.name,
             style = MaterialTheme.typography.labelMedium,

@@ -27,23 +27,23 @@ fun TrendingVideoCard(
 ) {
     Card(
         modifier = modifier
-            .width(CodaDimens.CardWidth)
+            .width(CodaDimens.TrendingCardWidth)
             .clickable { onClick(video.id) },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
         shape = MaterialTheme.shapes.medium
     ) {
-        Column(modifier = Modifier.padding(CodaDimens.SpacingSmall)) {
+        Column(modifier = Modifier.padding(CodaDimens.ItemSpacing)) {
             AsyncImage(
                 model = video.thumbnailUrl,
                 contentDescription = video.title,
                 modifier = Modifier
-                    .width(CodaDimens.CardWidth)
+                    .width(CodaDimens.TrendingCardWidth)
                     .aspectRatio(16f / 9f)
                     .clip(MaterialTheme.shapes.small)
             )
-            Spacer(modifier = Modifier.height(CodaDimens.SpacingXSmall))
+            Spacer(modifier = Modifier.height((CodaDimens.ItemSpacing / 2)))
             Text(
                 text = video.title,
                 style = MaterialTheme.typography.labelMedium,

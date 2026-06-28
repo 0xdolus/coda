@@ -27,22 +27,22 @@ fun PlaylistCard(
 ) {
     Card(
         modifier = modifier
-            .width(CodaDimens.CardWidth)
+            .width(CodaDimens.PlaylistCardHeight)
             .clickable { onClick(playlist.id) },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
         shape = MaterialTheme.shapes.medium
     ) {
-        Column(modifier = Modifier.padding(CodaDimens.SpacingSmall)) {
+        Column(modifier = Modifier.padding(CodaDimens.ItemSpacing)) {
             AsyncImage(
                 model = playlist.imageUrl,
                 contentDescription = playlist.name,
                 modifier = Modifier
-                    .size(CodaDimens.CardWidth)
+                    .size(CodaDimens.PlaylistCardHeight)
                     .clip(MaterialTheme.shapes.small)
             )
-            Spacer(modifier = Modifier.height(CodaDimens.SpacingXSmall))
+            Spacer(modifier = Modifier.height((CodaDimens.ItemSpacing / 2)))
             Text(
                 text = playlist.name,
                 style = MaterialTheme.typography.labelMedium,

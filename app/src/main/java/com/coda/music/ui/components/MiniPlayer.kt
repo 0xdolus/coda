@@ -41,7 +41,7 @@ fun MiniPlayer(
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable { onClick(track.id) }
-            .padding(horizontal = CodaDimens.ScreenPadding, vertical = CodaDimens.SpacingSmall),
+            .padding(horizontal = CodaDimens.ContentPadding, vertical = CodaDimens.ItemSpacing),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
@@ -51,7 +51,7 @@ fun MiniPlayer(
                 .size(CodaDimens.SongImageSize)
                 .clip(MaterialTheme.shapes.small)
         )
-        Spacer(modifier = Modifier.width(CodaDimens.SpacingMedium))
+        Spacer(modifier = Modifier.width((CodaDimens.ItemSpacing * 2)))
         Text(
             text = "${track.title} · ${track.artistName}",
             style = MaterialTheme.typography.bodyMedium,

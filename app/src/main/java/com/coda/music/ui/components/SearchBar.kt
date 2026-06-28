@@ -24,7 +24,7 @@ fun CodaSearchBar(
         onValueChange = onQueryChange,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = CodaDimens.ScreenPadding, vertical = CodaDimens.SpacingSmall),
+            .padding(horizontal = CodaDimens.ContentPadding, vertical = CodaDimens.ItemSpacing),
         placeholder = {
             Text(
                 text = placeholder,
