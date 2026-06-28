@@ -1,6 +1,7 @@
 package com.coda.music.data.source
 
 import com.coda.music.data.model.StreamResult
+import com.coda.music.data.provider.StreamProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
@@ -42,7 +43,7 @@ import javax.inject.Singleton
  *     extraction on repeated playback of the same track.
  */
 @Singleton
-class NewPipeStreamDataSource @Inject constructor() {
+class NewPipeStreamDataSource @Inject constructor() : StreamProvider {
 
     /**
      * Resolves a YouTube Video ID to a [StreamResult].
@@ -55,7 +56,7 @@ class NewPipeStreamDataSource @Inject constructor() {
      * IOException and TimeoutCancellationException are re-thrown so
      * NewPipeRepository can apply the canonical exception → UiError mapping.
      */
-    suspend fun getStreamUrl(trackId: String): StreamResult {
+    override suspend fun getStreamUrl(trackId: String): StreamResult {
         return withContext(Dispatchers.IO) {
             withTimeout(10_000L) {
                 try {

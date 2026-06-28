@@ -30,6 +30,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -102,7 +105,7 @@ fun PlayerScreen(
             }
             is PlayerUiState.Success -> {
                 val infiniteTransition = rememberInfiniteTransition(label = "vinyl")
-                val rotation by infiniteTransition.animateFloat(
+                val animatedRotation by infiniteTransition.animateFloat(
                     initialValue = 0f,
                     targetValue = 360f,
                     animationSpec = infiniteRepeatable(
@@ -111,6 +114,13 @@ fun PlayerScreen(
                     ),
                     label = "vinyl_rotation"
                 )
+                // Freeze the vinyl at whatever angle it was at when playback
+                // pauses, instead of continuing to tick — the animation itself
+                // never stops, so we latch the last value while paused and
+                // only read the live animated value while playing.
+                var lastPlayingRotation by remember { mutableFloatStateOf(0f) }
+                if (state.isPlaying) lastPlayingRotation = animatedRotation
+                val rotation = if (state.isPlaying) animatedRotation else lastPlayingRotation
 
                 Column(
                     modifier = Modifier
@@ -120,14 +130,14 @@ fun PlayerScreen(
                 ) {
                     Spacer(modifier = Modifier.height(CodaDimens.SectionSpacing))
 
-                    // Spinning vinyl
+                    // Spinning vinyl — rotates while playing, holds still when paused
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .size(CodaDimens.VinylSize)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .rotate(if (state.isPlaying) rotation else rotation)
+                            .rotate(rotation)
                     ) {
                         AsyncImage(
                             model = state.currentTrack.imageUrl,

@@ -3,6 +3,7 @@ package com.coda.music
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -12,6 +13,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.coda.music.navigation.AppNavGraph
@@ -40,6 +42,11 @@ class MainActivity : ComponentActivity() {
                 // Bottom nav tabs — hide on Player screen
                 val showBottomBar = currentRoute != Routes.PLAYER
 
+                // MiniPlayer is scoped to Home only for Phase 1 — see coda_sot.md
+                // "Decisions Made". It sits above the bottom bar, below the nav host.
+                val showMiniPlayer = currentRoute == Routes.HOME
+                val playbackState by playerController.playbackState.collectAsStateWithLifecycle()
+
                 CompositionLocalProvider(
                     LocalProviders.LocalPlayerController provides playerController
                 ) {
@@ -47,21 +54,30 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         snackbarHost = { SnackbarHost(snackbarHostState) },
                         bottomBar = {
-                            if (showBottomBar) {
-                                val rootRoute = when {
-                                    currentRoute?.startsWith("artist") == true -> null
-                                    else -> currentRoute
-                                }
-                                BottomNavigationBar(
-                                    currentRoute = rootRoute ?: Routes.HOME,
-                                    onNavigate = { route ->
-                                        navController.navigate(route) {
-                                            popUpTo(Routes.HOME) { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
+                            Column {
+                                if (showMiniPlayer && playbackState.currentTrack != null) {
+                                    MiniPlayer(
+                                        onClick = { trackId ->
+                                            navController.navigate(Routes.player(trackId))
                                         }
+                                    )
+                                }
+                                if (showBottomBar) {
+                                    val rootRoute = when {
+                                        currentRoute?.startsWith("artist") == true -> null
+                                        else -> currentRoute
                                     }
-                                )
+                                    BottomNavigationBar(
+                                        currentRoute = rootRoute ?: Routes.HOME,
+                                        onNavigate = { route ->
+                                            navController.navigate(route) {
+                                                popUpTo(Routes.HOME) { saveState = true }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         }
                     ) { innerPadding ->
