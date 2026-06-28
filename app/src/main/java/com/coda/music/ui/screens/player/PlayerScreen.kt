@@ -7,9 +7,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,8 +18,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,9 +40,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -50,6 +56,12 @@ import com.coda.music.ui.state.PlayerEvent
 import com.coda.music.ui.state.PlayerUiState
 import com.coda.music.ui.theme.CodaDimens
 import com.coda.music.viewmodel.PlayerViewModel
+
+private fun Int.toTimestamp(): String {
+    val m = this / 60
+    val s = this % 60
+    return "%d:%02d".format(m, s)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,10 +126,6 @@ fun PlayerScreen(
                     ),
                     label = "vinyl_rotation"
                 )
-                // Freeze the vinyl at whatever angle it was at when playback
-                // pauses, instead of continuing to tick — the animation itself
-                // never stops, so we latch the last value while paused and
-                // only read the live animated value while playing.
                 var lastPlayingRotation by remember { mutableFloatStateOf(0f) }
                 if (state.isPlaying) lastPlayingRotation = animatedRotation
                 val rotation = if (state.isPlaying) animatedRotation else lastPlayingRotation
@@ -128,9 +136,9 @@ fun PlayerScreen(
                         .padding(horizontal = CodaDimens.ContentPadding),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Spacer(modifier = Modifier.height(CodaDimens.SectionSpacing))
+                    Spacer(modifier = Modifier.height(CodaDimens.ItemSpacing))
 
-                    // Spinning vinyl — rotates while playing, holds still when paused
+                    // Vinyl disc — rotates while playing
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
@@ -139,9 +147,11 @@ fun PlayerScreen(
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .rotate(rotation)
                     ) {
+                        // Album art — clipped to circle to fit vinyl
                         AsyncImage(
                             model = state.currentTrack.imageUrl,
                             contentDescription = null,
+                            contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .size(CodaDimens.VinylArtInset)
                                 .clip(CircleShape)
@@ -157,35 +167,33 @@ fun PlayerScreen(
 
                     Spacer(modifier = Modifier.height(CodaDimens.SectionSpacing))
 
-                    // Track info + like
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(end = 48.dp),
-                            horizontalAlignment = Alignment.Start
-                        ) {
+                    // Track info row — title + artist left, heart right
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                             Text(
                                 text = state.currentTrack.title,
-                                style = MaterialTheme.typography.titleLarge,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = state.currentTrack.artistName,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                        IconButton(
-                            onClick = { viewModel.onEvent(PlayerEvent.OnLikeToggle) },
-                            modifier = Modifier.align(Alignment.CenterEnd)
-                        ) {
+                        IconButton(onClick = { viewModel.onEvent(PlayerEvent.OnLikeToggle) }) {
                             Icon(
-                                imageVector = Icons.Filled.FavoriteBorder,
+                                imageVector = if (state.isLiked) Icons.Filled.Favorite
+                                              else Icons.Filled.FavoriteBorder,
                                 contentDescription = "Like",
                                 tint = if (state.isLiked) MaterialTheme.colorScheme.primary
                                        else MaterialTheme.colorScheme.onSurfaceVariant
@@ -193,7 +201,7 @@ fun PlayerScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(CodaDimens.ItemSpacing))
+                    Spacer(modifier = Modifier.height(CodaDimens.SectionSpacing))
 
                     // Waveform progress bar
                     CodaProgressBar(
@@ -203,7 +211,24 @@ fun PlayerScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Spacer(modifier = Modifier.height(CodaDimens.ItemSpacing))
+                    // Timestamps below waveform
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = state.progressSeconds.toTimestamp(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = state.durationSeconds.toTimestamp(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(CodaDimens.SectionSpacing))
 
                     // Playback controls
                     PlaybackControls(
