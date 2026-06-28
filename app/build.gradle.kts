@@ -55,6 +55,12 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    // Dagger/Hilt's bundled kotlin-metadata-jvm reader lags the Kotlin compiler's
+    // own metadata format version by one or more minors. Dagger 2.57+ unshaded
+    // this dependency specifically so it can be forced forward without waiting
+    // for a Dagger release — see google/dagger#5001 / #5059. Pin it on the ksp
+    // (annotation processor) classpath only.
+    ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.0")
     implementation(libs.hilt.navigation.compose)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
