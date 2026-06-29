@@ -1,5 +1,6 @@
 package com.coda.music.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.coda.music.data.model.UiError
@@ -80,6 +81,11 @@ class HomeViewModel @Inject constructor(
                     topSongs       = topSongs
                 )
             } catch (e: Exception) {
+                // TEMP DEBUG LOGGING — remove once root cause is found.
+                // Full exception type + message + stack trace, tagged so it's
+                // easy to grep: `adb logcat -s CodaHome`
+                Log.e("CodaHome", "Home load() failed: ${e::class.qualifiedName} - ${e.message}", e)
+
                 val uiError = newPipeRepository.mapToUiError(e)
                 if (_uiState.value is HomeUiState.Loading) {
                     // Initial load failure → critical ErrorScreen
