@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
@@ -17,14 +15,7 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
-        val localProps = Properties()
-        val localFile = rootProject.file("local.properties")
-        if (localFile.exists()) localProps.load(localFile.inputStream())
-        buildConfigField(
-            "String",
-            "LASTFM_API_KEY",
-            "\"${localProps.getProperty("lastfm.api.key", "")}\""
-        )
+        buildConfigField("String", "LASTFM_API_KEY", "\"ab629bd5f89e6aa407169692bbe630a4\"")
     }
 
     buildTypes {
@@ -66,11 +57,6 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    // Dagger/Hilt's bundled kotlin-metadata-jvm reader lags the Kotlin compiler's
-    // own metadata format version by one or more minors. Dagger 2.57+ unshaded
-    // this dependency specifically so it can be forced forward without waiting
-    // for a Dagger release — see google/dagger#5001 / #5059. Pin it on the ksp
-    // (annotation processor) classpath only.
     ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.0")
     implementation(libs.hilt.navigation.compose)
     implementation(libs.coil.compose)
