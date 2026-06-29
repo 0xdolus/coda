@@ -1,15 +1,19 @@
 package com.coda.music.player
 
+import android.content.ComponentName
 import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import com.coda.music.data.model.StreamQuality
 import com.coda.music.data.model.StreamResult
 import com.coda.music.data.model.Track
 import com.coda.music.data.source.NewPipeStreamDataSource
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,25 +28,27 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Purpose: Singleton owner of PlaybackState and the ExoPlayer instance.
- * Translates ExoPlayer listener callbacks into PlaybackState updates.
+ * Purpose: Singleton owner of PlaybackState. Connects to MediaPlaybackService
+ *          via Media3 MediaController so all playback commands are routed through
+ *          the foreground service — keeping audio alive in the background.
+ *          Translates Player.Listener callbacks into PlaybackState updates.
  *
- * Now accepts StreamQuality directly so the Settings screen can trigger
- * re-resolution of the current track at a different bitrate immediately.
+ * Dependencies: MediaPlaybackService, MediaController (media3-session),
+ *               NewPipeStreamDataSource, Hilt
  *
- * Dependencies: ExoPlayer, MediaSession, NewPipeStreamDataSource, Hilt
  * Public API:
  *   playbackState: StateFlow<PlaybackState>
  *   play(track, queue, index, quality)
- *   reloadWithQuality(quality)   ← re-resolves current track at new quality
+ *   reloadWithQuality(quality)
  *   togglePlayPause()
  *   seekTo(positionSeconds)
  *   skipToNext() / skipToPrevious()
  *   toggleShuffle() / toggleRepeat()
  *   release()
+ *
  * Future TODOs:
- *   - MediaPlaybackService + foreground notification
- *   - Audio focus edge case handling beyond ExoPlayer built-in
+ *   - Audio focus edge-case handling beyond ExoPlayer built-in
+ *   - Queue sync: push queue to MediaSession so lock-screen controls show next track
  */
 @Singleton
 class PlayerController @Inject constructor(
@@ -54,29 +60,44 @@ class PlayerController @Inject constructor(
     private val _playbackState = MutableStateFlow(PlaybackState())
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
 
-    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context).build()
-    val mediaSession: MediaSession = MediaSession.Builder(context, exoPlayer).build()
+    private var controllerFuture: ListenableFuture<MediaController>? = null
+    private var controller: MediaController? = null
 
     private var progressJob: Job? = null
     private var currentQuality: StreamQuality = StreamQuality.BEST
 
+    private val playerListener = object : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            _playbackState.value = _playbackState.value.copy(isPlaying = isPlaying)
+            if (isPlaying) startProgressTracking() else stopProgressTracking()
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED) handleTrackEnded()
+        }
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            val player = controller ?: return
+            _playbackState.value = _playbackState.value.copy(
+                durationSeconds = (player.duration / 1000).toInt().coerceAtLeast(0)
+            )
+        }
+    }
+
     init {
-        exoPlayer.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                _playbackState.value = _playbackState.value.copy(isPlaying = isPlaying)
-                if (isPlaying) startProgressTracking() else stopProgressTracking()
-            }
+        connectToService()
+    }
 
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) handleTrackEnded()
-            }
-
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                _playbackState.value = _playbackState.value.copy(
-                    durationSeconds = (exoPlayer.duration / 1000).toInt().coerceAtLeast(0)
-                )
-            }
-        })
+    private fun connectToService() {
+        val sessionToken = SessionToken(
+            context,
+            ComponentName(context, MediaPlaybackService::class.java)
+        )
+        controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
+        controllerFuture?.addListener({
+            controller = controllerFuture?.get()
+            controller?.addListener(playerListener)
+        }, MoreExecutors.directExecutor())
     }
 
     fun play(
@@ -103,18 +124,19 @@ class PlayerController @Inject constructor(
     fun reloadWithQuality(quality: StreamQuality) {
         currentQuality = quality
         val track = _playbackState.value.currentTrack ?: return
-        val positionMs = exoPlayer.currentPosition
+        val positionMs = controller?.currentPosition ?: 0L
         scope.launch {
             resolveAndPlay(track, quality, seekToMs = positionMs)
         }
     }
 
     fun togglePlayPause() {
-        if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+        val player = controller ?: return
+        if (player.isPlaying) player.pause() else player.play()
     }
 
     fun seekTo(positionSeconds: Int) {
-        exoPlayer.seekTo(positionSeconds * 1000L)
+        controller?.seekTo(positionSeconds * 1000L)
         _playbackState.value = _playbackState.value.copy(progressSeconds = positionSeconds)
     }
 
@@ -153,30 +175,30 @@ class PlayerController @Inject constructor(
     }
 
     fun toggleRepeat() {
-        _playbackState.value = _playbackState.value.copy(repeatEnabled = !_playbackState.value.repeatEnabled)
+        _playbackState.value = _playbackState.value.copy(
+            repeatEnabled = !_playbackState.value.repeatEnabled
+        )
     }
 
     fun release() {
         stopProgressTracking()
-        mediaSession.release()
-        exoPlayer.release()
+        controller?.removeListener(playerListener)
+        controllerFuture?.let { MediaController.releaseFuture(it) }
+        controller = null
+        controllerFuture = null
     }
 
     private suspend fun resolveAndPlay(track: Track, quality: StreamQuality, seekToMs: Long = 0L) {
+        val player = controller ?: return
         when (val result = streamDataSource.getStreamUrl(track.id, quality)) {
             is StreamResult.Ready -> {
-                val factory = if (result.headers.isNotEmpty()) {
-                    DefaultHttpDataSource.Factory().setDefaultRequestProperties(result.headers)
-                } else {
-                    DefaultHttpDataSource.Factory()
-                }
                 val mediaItem = MediaItem.fromUri(result.url)
-                exoPlayer.stop()
-                exoPlayer.clearMediaItems()
-                exoPlayer.setMediaItem(mediaItem)
-                exoPlayer.prepare()
-                if (seekToMs > 0) exoPlayer.seekTo(seekToMs)
-                exoPlayer.play()
+                player.stop()
+                player.clearMediaItems()
+                player.setMediaItem(mediaItem)
+                player.prepare()
+                if (seekToMs > 0) player.seekTo(seekToMs)
+                player.play()
             }
             is StreamResult.Unavailable -> {
                 _playbackState.value = _playbackState.value.copy(isPlaying = false)
@@ -189,8 +211,8 @@ class PlayerController @Inject constructor(
 
     private fun handleTrackEnded() {
         if (_playbackState.value.repeatEnabled) {
-            exoPlayer.seekTo(0)
-            exoPlayer.play()
+            controller?.seekTo(0)
+            controller?.play()
         } else {
             skipToNext()
         }
@@ -200,12 +222,15 @@ class PlayerController @Inject constructor(
         progressJob?.cancel()
         progressJob = scope.launch {
             while (true) {
-                val progress = (exoPlayer.currentPosition / 1000).toInt()
-                val duration = (exoPlayer.duration / 1000).toInt().coerceAtLeast(0)
-                _playbackState.value = _playbackState.value.copy(
-                    progressSeconds = progress,
-                    durationSeconds = duration
-                )
+                val player = controller
+                if (player != null) {
+                    val progress = (player.currentPosition / 1000).toInt()
+                    val duration = (player.duration / 1000).toInt().coerceAtLeast(0)
+                    _playbackState.value = _playbackState.value.copy(
+                        progressSeconds = progress,
+                        durationSeconds = duration
+                    )
+                }
                 delay(1_000)
             }
         }

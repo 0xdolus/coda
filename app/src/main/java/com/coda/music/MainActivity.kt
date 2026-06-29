@@ -39,11 +39,7 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
 
-                // Bottom nav tabs — hide on Player screen
                 val showBottomBar = currentRoute != Routes.PLAYER
-
-                // MiniPlayer is scoped to Home only for Phase 1 — see coda_sot.md
-                // "Decisions Made". It sits above the bottom bar, below the nav host.
                 val showMiniPlayer = currentRoute == Routes.HOME
                 val playbackState by playerController.playbackState.collectAsStateWithLifecycle()
 
@@ -94,6 +90,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // Release the MediaController connection only — the MediaPlaybackService
+        // keeps running independently, sustaining background audio.
         playerController.release()
     }
 }
