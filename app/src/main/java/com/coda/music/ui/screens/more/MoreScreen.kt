@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.coda.music.debug.LogBus
 import com.coda.music.data.model.StreamQuality
 import com.coda.music.ui.theme.CodaDimens
 import com.coda.music.viewmodel.SettingsViewModel
@@ -102,6 +104,50 @@ fun MoreScreen(
             checked = repeat,
             onCheckedChange = viewModel::setDefaultRepeat
         )
+
+        Spacer(modifier = Modifier.height(CodaDimens.SectionSpacing))
+        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+        Spacer(modifier = Modifier.height(CodaDimens.SectionSpacing))
+
+        // — Debug Logs —
+        SectionLabel("Debug Logs")
+
+        val logEntries by LogBus.entries.collectAsStateWithLifecycle()
+
+        Text(
+            text = "In-app log buffer — works without ADB/root, since logcat " +
+                   "is restricted to system apps on this device.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedButton(onClick = { LogBus.clear() }) {
+            Text("Clear logs")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (logEntries.isEmpty()) {
+            Text(
+                text = "No logs yet.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            logEntries.asReversed().forEach { entry ->
+                Text(
+                    text = "[${entry.timestamp}] ${entry.tag}: ${entry.message}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (entry.isError)
+                        MaterialTheme.colorScheme.error
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(CodaDimens.SectionSpacing))
         Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))

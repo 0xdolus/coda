@@ -1,11 +1,11 @@
 package com.coda.music.viewmodel
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.coda.music.data.model.UiError
 import com.coda.music.data.repository.MusicRepository
 import com.coda.music.data.repository.NewPipeRepository
+import com.coda.music.debug.LogBus
 import com.coda.music.ui.state.HomeEvent
 import com.coda.music.ui.state.HomeUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -60,6 +60,7 @@ class HomeViewModel @Inject constructor(
     private fun load() {
         viewModelScope.launch {
             _uiState.value = HomeUiState.Loading
+            LogBus.d("CodaHome", "load() started")
             try {
                 val artists       = repository.getArtists()
                 val topSongs      = repository.getTopSongs()
@@ -75,16 +76,14 @@ class HomeViewModel @Inject constructor(
                         thumbnailUrl = track.imageUrl
                     )
                 }
+                LogBus.d("CodaHome", "load() success — ${artists.size} artists, ${topSongs.size} songs")
                 _uiState.value = HomeUiState.Success(
                     artists        = artists,
                     trendingVideos = trendingVideos,
                     topSongs       = topSongs
                 )
             } catch (e: Exception) {
-                // TEMP DEBUG LOGGING — remove once root cause is found.
-                // Full exception type + message + stack trace, tagged so it's
-                // easy to grep: `adb logcat -s CodaHome`
-                Log.e("CodaHome", "Home load() failed: ${e::class.qualifiedName} - ${e.message}", e)
+                LogBus.e("CodaHome", "load() failed: ${e::class.qualifiedName} - ${e.message}", e)
 
                 val uiError = newPipeRepository.mapToUiError(e)
                 if (_uiState.value is HomeUiState.Loading) {
