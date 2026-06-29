@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
@@ -15,7 +17,7 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
-        val localProps = java.util.Properties()
+        val localProps = Properties()
         val localFile = rootProject.file("local.properties")
         if (localFile.exists()) localProps.load(localFile.inputStream())
         buildConfigField(
