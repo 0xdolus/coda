@@ -12,5 +12,5 @@ interface MusicRepository {
     suspend fun search(query: String): List<Track>
     suspend fun getLikedSongs(): List<Track>
     suspend fun getTrack(trackId: String): Track
-    suspend fun getTrackStreamUrl(trackId: String): StreamResult
+    suspend fun getTrackStreamUrl(track: Track): StreamResult
 }

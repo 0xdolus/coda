@@ -2,50 +2,49 @@ package com.coda.music.data.source
 
 import com.coda.music.data.model.StreamQuality
 import com.coda.music.data.model.StreamResult
+import com.coda.music.data.model.Track
 import com.coda.music.data.provider.StreamProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.schabi.newpipe.extractor.NewPipe
+import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.exceptions.ExtractionException
 import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.StreamExtractor
+import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Purpose: Resolves a YouTube Video ID to a [StreamResult] via NewPipeExtractor.
- * Respects [StreamQuality] to pick the appropriate bitrate tier.
- *
- * Quality selection (within one resolution call — not a retry):
- *   LOW    → lowest available bitrate
- *   NORMAL → closest to 128 kbps
- *   HIGH   → closest to 160 kbps
- *   BEST   → highest available bitrate (default)
- *
- * IOException and TimeoutCancellationException are re-thrown for
- * NewPipeRepository to map to UiError.
- *
- * Dependencies: NewPipeExtractor, Kotlin Coroutines
- * Public API: getStreamUrl(trackId, quality)
- * Future TODOs: brief URL caching (TTL ~5 min) to avoid redundant extraction.
+ * Stream-only as of Phase 1. Searches YouTube by "{artist} - {title}" and
+ * resolves audio from the best match. Never supplies metadata, home feed,
+ * artist info, or search results — that is Last.fm's job now.
  */
 @Singleton
 class NewPipeStreamDataSource @Inject constructor() : StreamProvider {
 
-    // Called by PlayerController when quality setting changes mid-playback
     suspend fun getStreamUrl(
-        trackId: String,
+        track: Track,
         quality: StreamQuality = StreamQuality.BEST
     ): StreamResult {
         return withContext(Dispatchers.IO) {
             withTimeout(10_000L) {
                 try {
-                    val url = "https://www.youtube.com/watch?v=$trackId"
-                    val service = NewPipe.getServiceByUrl(url)
-                    val linkHandler = service.streamLHFactory.fromUrl(url)
+                    val service = NewPipe.getService(ServiceList.YouTube.serviceId)
+                    val searchString = "${track.artistName} - ${track.title}"
+                    val queryHandler = service.searchQHFactory
+                        .fromQuery(searchString, listOf("videos"), "")
+                    val searchExtractor = service.getSearchExtractor(queryHandler)
+                    searchExtractor.fetchPage()
+                    val firstResult = searchExtractor.initialPage.items
+                        .filterIsInstance<StreamInfoItem>()
+                        .firstOrNull()
+                        ?: return@withTimeout StreamResult.Unavailable
+
+                    val linkHandler = service.streamLHFactory.fromUrl(firstResult.url)
                     val extractor: StreamExtractor = service.getStreamExtractor(linkHandler)
                     extractor.fetchPage()
 
@@ -77,9 +76,8 @@ class NewPipeStreamDataSource @Inject constructor() : StreamProvider {
         }
     }
 
-    // StreamProvider interface — defaults to BEST for callers that don't pass quality
-    override suspend fun getStreamUrl(trackId: String): StreamResult =
-        getStreamUrl(trackId, StreamQuality.BEST)
+    override suspend fun getStreamUrl(track: Track): StreamResult =
+        getStreamUrl(track, StreamQuality.BEST)
 
     private fun pickByQuality(streams: List<AudioStream>, quality: StreamQuality): AudioStream? {
         val withBitrate = streams.mapNotNull { s ->
@@ -90,8 +88,8 @@ class NewPipeStreamDataSource @Inject constructor() : StreamProvider {
         if (withBitrate.isEmpty()) return streams.firstOrNull()
 
         return when (quality) {
-            StreamQuality.LOW  -> withBitrate.first().second
-            StreamQuality.BEST -> withBitrate.last().second
+            StreamQuality.LOW    -> withBitrate.first().second
+            StreamQuality.BEST   -> withBitrate.last().second
             StreamQuality.NORMAL -> withBitrate.minByOrNull { kotlin.math.abs(it.first - 128) }?.second
             StreamQuality.HIGH   -> withBitrate.minByOrNull { kotlin.math.abs(it.first - 160) }?.second
         }

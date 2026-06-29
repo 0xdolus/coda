@@ -190,7 +190,7 @@ class PlayerController @Inject constructor(
 
     private suspend fun resolveAndPlay(track: Track, quality: StreamQuality, seekToMs: Long = 0L) {
         val player = controller ?: return
-        when (val result = streamDataSource.getStreamUrl(track.id, quality)) {
+        when (val result = streamDataSource.getStreamUrl(track, quality)) {
             is StreamResult.Ready -> {
                 val mediaItem = MediaItem.fromUri(result.url)
                 player.stop()

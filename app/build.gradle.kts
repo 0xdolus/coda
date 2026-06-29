@@ -15,6 +15,14 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
+        val localProps = java.util.Properties()
+        val localFile = rootProject.file("local.properties")
+        if (localFile.exists()) localProps.load(localFile.inputStream())
+        buildConfigField(
+            "String",
+            "LASTFM_API_KEY",
+            "\"${localProps.getProperty("lastfm.api.key", "")}\""
+        )
     }
 
     buildTypes {
@@ -34,6 +42,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -66,6 +75,9 @@ dependencies {
     implementation(libs.coil.network.okhttp)
     implementation(libs.newpipe.extractor)
     implementation(libs.okhttp)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.moshi)
+    implementation(libs.moshi.kotlin)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)
     implementation(libs.datastore.preferences)
