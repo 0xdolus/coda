@@ -6,6 +6,7 @@ import com.coda.music.data.model.Track
 import com.coda.music.data.model.UiError
 import com.coda.music.data.source.LastFmMetadataDataSource
 import com.coda.music.data.source.NewPipeStreamDataSource
+import com.coda.music.debug.LogBus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
@@ -65,6 +66,13 @@ class NewPipeRepository @Inject constructor(
             distinctArtistNames.map { name ->
                 async {
                     runCatching { metadataDataSource.getArtistInfo(name) }
+                        .onFailure { e ->
+                            LogBus.e(
+                                "CodaHome",
+                                "getArtistInfo(\"$name\") failed: ${describeError(e)}",
+                                e
+                            )
+                        }
                         .getOrElse {
                             val matchingTrack = topTracks.first { it.artistName == name }
                             Artist(
@@ -83,7 +91,12 @@ class NewPipeRepository @Inject constructor(
 
     override suspend fun getTopSongs(): List<Track> {
         cachedTopSongs?.let { return it }
-        val result = metadataDataSource.getTopTracks()
+        val result = try {
+            metadataDataSource.getTopTracks()
+        } catch (e: Exception) {
+            LogBus.e("CodaHome", "getTopTracks() failed: ${describeError(e)}", e)
+            throw e
+        }
         cachedTopSongs = result
         return result
     }
@@ -116,6 +129,21 @@ class NewPipeRepository @Inject constructor(
         } catch (e: ExtractionException) {
             StreamResult.Unavailable
         }
+    }
+
+    /**
+     * Builds a detailed description of an HTTP failure, including the exact
+     * request URL Retrofit sent — critical for spotting malformed query
+     * params (bad encoding, missing fields) that a generic "HTTP 400"
+     * message hides.
+     */
+    private fun describeError(e: Throwable): String {
+        if (e is HttpException) {
+            val url = e.response()?.raw()?.request?.url?.toString() ?: "unknown URL"
+            val body = try { e.response()?.errorBody()?.string() } catch (_: Exception) { null }
+            return "HTTP ${e.code()} on $url" + (body?.let { " — body: $it" } ?: "")
+        }
+        return "${e::class.qualifiedName} - ${e.message}"
     }
 
     fun mapToUiError(e: Exception): UiError {
