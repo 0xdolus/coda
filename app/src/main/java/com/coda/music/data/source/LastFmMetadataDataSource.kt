@@ -1,6 +1,7 @@
 package com.coda.music.data.source
 
 import com.coda.music.data.model.Artist
+import com.coda.music.data.model.LastFmSearchTrack
 import com.coda.music.data.model.LastFmTrack
 import com.coda.music.data.model.Track
 import com.coda.music.util.toCleanTrackTitle
@@ -38,6 +39,20 @@ class LastFmMetadataDataSource @Inject constructor(
             id              = id,
             title           = cleanTitle,
             artistName      = artist.name,
+            imageUrl        = image?.lastOrNull()?.url ?: "",
+            durationSeconds = duration?.toIntOrNull() ?: 0
+        )
+    }
+
+    // Search results have artist as a plain string, not an object
+    private fun LastFmSearchTrack.toTrack(): Track {
+        val cleanTitle = name.toCleanTrackTitle()
+        val id = mbid?.takeIf { it.isNotBlank() }
+            ?: "${artist}::$cleanTitle".lowercase()
+        return Track(
+            id              = id,
+            title           = cleanTitle,
+            artistName      = artist,
             imageUrl        = image?.lastOrNull()?.url ?: "",
             durationSeconds = duration?.toIntOrNull() ?: 0
         )
