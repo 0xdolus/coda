@@ -1,5 +1,6 @@
 package com.coda.music.di
 
+import com.coda.music.data.source.ItunesApi
 import com.coda.music.data.source.LastFmApi
 import com.coda.music.util.CodaConstants
 import com.squareup.moshi.Moshi
@@ -29,4 +30,13 @@ object NetworkModule {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(LastFmApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideItunesApi(moshi: Moshi): ItunesApi =
+        Retrofit.Builder()
+            .baseUrl(CodaConstants.ITUNES_BASE_URL)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(ItunesApi::class.java)
 }

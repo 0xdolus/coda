@@ -5,25 +5,37 @@ import com.coda.music.data.model.LastFmSearchTrack
 import com.coda.music.data.model.LastFmTrack
 import com.coda.music.data.model.Track
 import com.coda.music.util.toCleanTrackTitle
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.awaitAll
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class LastFmMetadataDataSource @Inject constructor(
-    private val api: LastFmApi
+    private val api: LastFmApi,
+    private val artworkDataSource: ArtworkDataSource
 ) {
-    suspend fun getTopTracks(): List<Track> =
-        api.getTopTracks().tracks.track.map { it.toTrack() }
+    suspend fun getTopTracks(): List<Track> = coroutineScope {
+        api.getTopTracks().tracks.track
+            .map { async { it.toTrack() } }
+            .awaitAll()
+    }
 
-    suspend fun search(query: String): List<Track> =
-        api.searchTracks(query).results.trackMatches.track.map { it.toTrack() }
+    suspend fun search(query: String): List<Track> = coroutineScope {
+        api.searchTracks(query).results.trackMatches.track
+            .map { async { it.toTrack() } }
+            .awaitAll()
+    }
 
     suspend fun getArtistInfo(name: String): Artist {
         val info = api.getArtistInfo(name).artist
+        val lastFmImage = info.image?.lastOrNull()?.url?.takeIf { it.isNotBlank() }
+        val imageUrl = lastFmImage ?: artworkDataSource.resolveArtistArtwork(info.name) ?: ""
         return Artist(
             id               = info.mbid?.takeIf { it.isNotBlank() } ?: info.name.lowercase(),
             name             = info.name,
-            imageUrl         = info.image?.lastOrNull()?.url ?: "",
+            imageUrl         = imageUrl,
             monthlyListeners = info.stats?.listeners
                 ?.toLongOrNull()
                 ?.let { formatListenerCount(it) }
@@ -31,29 +43,37 @@ class LastFmMetadataDataSource @Inject constructor(
         )
     }
 
-    private fun LastFmTrack.toTrack(): Track {
+    private suspend fun LastFmTrack.toTrack(): Track {
         val cleanTitle = name.toCleanTrackTitle()
         val id = mbid?.takeIf { it.isNotBlank() }
             ?: "${artist.name}::$cleanTitle".lowercase()
+        val lastFmImage = image?.lastOrNull()?.url?.takeIf { it.isNotBlank() }
+        val imageUrl = lastFmImage
+            ?: artworkDataSource.resolveTrackArtwork(artist.name, cleanTitle)
+            ?: ""
         return Track(
             id              = id,
             title           = cleanTitle,
             artistName      = artist.name,
-            imageUrl        = image?.lastOrNull()?.url ?: "",
+            imageUrl        = imageUrl,
             durationSeconds = duration?.toIntOrNull() ?: 0
         )
     }
 
     // Search results have artist as a plain string, not an object
-    private fun LastFmSearchTrack.toTrack(): Track {
+    private suspend fun LastFmSearchTrack.toTrack(): Track {
         val cleanTitle = name.toCleanTrackTitle()
         val id = mbid?.takeIf { it.isNotBlank() }
             ?: "${artist}::$cleanTitle".lowercase()
+        val lastFmImage = image?.lastOrNull()?.url?.takeIf { it.isNotBlank() }
+        val imageUrl = lastFmImage
+            ?: artworkDataSource.resolveTrackArtwork(artist, cleanTitle)
+            ?: ""
         return Track(
             id              = id,
             title           = cleanTitle,
             artistName      = artist,
-            imageUrl        = image?.lastOrNull()?.url ?: "",
+            imageUrl        = imageUrl,
             durationSeconds = duration?.toIntOrNull() ?: 0
         )
     }
